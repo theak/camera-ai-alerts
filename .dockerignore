@@ -1,0 +1,37 @@
+# Python
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Environment
+.env
+.venv
+venv/
+ENV/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+tmp.jpg
+*.tmp
+
+# Documentation
+README.md
+LICENSE
+
+# Note: system_prompt.txt is intentionally included in the Docker image
+
+# CI/CD
+.github/
