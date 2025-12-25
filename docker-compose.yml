@@ -1,6 +1,6 @@
 services:
   motion-detection:
-    build: .
+    image: akshaykannan/homeassistant-camera-ai:latest
     ports:
       - "5427:5427"
     volumes:

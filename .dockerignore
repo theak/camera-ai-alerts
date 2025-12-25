@@ -31,6 +31,12 @@ tmp.jpg
 README.md
 LICENSE
 
+# Configuration (will be mounted as volume)
+config.yaml
+
+# Utilities
+list_models.py
+
 # Note: system_prompt.txt is intentionally included in the Docker image
 
 # CI/CD

@@ -15,20 +15,61 @@ AI-powered motion detection server that integrates Blue Iris security cameras wi
 - `GOOGLE_API_KEY` - Get at [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
 - `HA_TOKEN` - Home Assistant long-lived access token
 
-## Quick Start
+## Using Docker Hub Image (Recommended)
+
+Pre-built multi-architecture images are available on Docker Hub supporting AMD64 and ARM64 (Apple Silicon).
+
+### Quick Start with Docker Run
+
+```bash
+# 1. Create config file
+curl -o config.yaml https://raw.githubusercontent.com/theak/camera-ai-alerts/refs/heads/main/config.example.yaml
+# Edit config.yaml with your settings
+
+# 2. Run container
+docker run -d \
+  --name motion-detection \
+  -p 5427:5427 \
+  -v $(pwd)/config.yaml:/app/config.yaml \
+  -e GOOGLE_API_KEY=your_key_here \
+  -e HA_TOKEN=your_token_here \
+  --restart unless-stopped \
+  akshaykannan/homeassistant-camera-ai:latest
+```
+
+### Quick Start with Docker Compose
+
+```bash
+# 1. Download compose file
+curl -o docker-compose.yml https://raw.githubusercontent.com/theak/camera-ai-alerts/refs/heads/main/docker-compose.yml
+
+# 2. Create config
+curl -o config.yaml https://raw.githubusercontent.com/theak/camera-ai-alerts/refs/heads/main/config.example.yaml
+# Edit config.yaml with your settings
+
+# 3. Set secrets and run
+export GOOGLE_API_KEY=your_key_here
+export HA_TOKEN=your_token_here
+docker-compose up -d
+```
+
+## Building from Source
+
+Only needed if you want to modify the code or build locally.
 
 ```bash
 # 1. Clone and enter directory
-git clone <repo-url>
-cd homeassistant-camera-ai
+git clone https://github.com/theak/camera-ai-alerts.git
+cd camera-ai-alerts
 
 # 2. Copy and edit config
 cp config.example.yaml config.yaml
 # Edit config.yaml with your Home Assistant and CallMeBot settings
 
-# 3. Set secrets and run
+# 3. Build and run
 export GOOGLE_API_KEY=your_key_here
 export HA_TOKEN=your_token_here
+docker-compose build
 docker-compose up -d
 ```
 
