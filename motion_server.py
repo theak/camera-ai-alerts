@@ -230,8 +230,7 @@ def handle_motion():
                 should_announce_voice = ha.check_entity_state(HA_VOICE_ENTITY)
                 if should_announce_voice:
                     logger.info(f"Voice announcement: {announcement}")
-                    for entity in HA_ANNOUNCE_ENTITY:
-                        ha.speak(announcement, entity)
+                    ha.speak(announcement, HA_ANNOUNCE_ENTITY)
                 else:
                     logger.info("Voice announcements disabled")
 

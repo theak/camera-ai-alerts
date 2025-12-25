@@ -25,17 +25,17 @@ class HomeAssistant:
             "Content-Type": "application/json",
         }
 
-    def speak(self, message: str, entity_id: str) -> None:
+    def speak(self, message: str, entity_ids: list) -> None:
         """
-        Send text message to be spoken by Assist Satellite.
+        Send text message to be spoken by Assist Satellite(s).
 
         Args:
             message: The text message to speak
-            entity_id: Assist Satellite entity ID (e.g., assist_satellite.living_room)
+            entity_ids: List of Assist Satellite entity IDs
         """
         try:
             url = f"{self.url}/api/services/assist_satellite/announce"
-            data = {"entity_id": entity_id, "message": message}
+            data = {"entity_id": entity_ids, "message": message}
             response = requests.post(url, headers=self.headers, json=data, timeout=30)
             response.raise_for_status()
             logger.info(f"HA Speaking: '{message}'")
@@ -104,6 +104,5 @@ if __name__ == "__main__":
         os.getenv("HA_URL", "http://homeassistant.local:8123"),
         os.getenv("HA_TOKEN", ""),
     )
-    ha.speak(
-        "hello world", os.getenv("HA_ANNOUNCE_ENTITY", "assist_satellite.living_room")
-    )
+    entities = [os.getenv("HA_ANNOUNCE_ENTITY", "assist_satellite.living_room")]
+    ha.speak("hello world", entities)
