@@ -14,6 +14,7 @@ from threading import Lock
 from string import Template
 from flask import Flask, request, jsonify
 import requests
+from requests.auth import HTTPDigestAuth
 import yaml
 from google import genai
 from google.genai import types
@@ -97,13 +98,22 @@ def update_last_processed(location):
         last_processed[location] = datetime.now()
 
 def fetch_image(url, username=None, password=None):
-    """Fetch image from URL with optional basic auth"""
+    """Fetch image from URL with optional auth (tries Basic, then Digest)"""
     try:
-        auth = None
         if username and password:
-            auth = (username, password)
-        response = requests.get(url, timeout=10, auth=auth)
-        response.raise_for_status()
+            # Try Basic Auth first
+            response = requests.get(url, timeout=10, auth=(username, password))
+
+            # If 401, try Digest Auth
+            if response.status_code == 401:
+                logger.info(f"Basic auth failed, trying Digest auth for {url}")
+                response = requests.get(url, timeout=10, auth=HTTPDigestAuth(username, password))
+
+            response.raise_for_status()
+        else:
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+
         return response.content
     except Exception as e:
         logger.error(f"Error fetching image from {url}: {e}")
