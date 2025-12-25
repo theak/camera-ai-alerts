@@ -4,4 +4,4 @@ Look for any people, dogs, or vehicles in the main view of the camera and descri
 
 Reply with ONLY one of:
 - "None" if no objects of interest in the main view
-- A short description of the object of interest like "A person with a box" or "Two people with a dog"
+- A short description of the objects of interest like "A woman holding a box"
