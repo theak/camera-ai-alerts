@@ -51,6 +51,8 @@ HA_TOKEN = config['home_assistant']['token']
 HA_ANNOUNCE_ENTITY = config['home_assistant']['entities']['announce']
 HA_VOICE_ENTITY = config['home_assistant']['entities']['voice_announcements']
 HA_HOME_OCCUPIED_ENTITY = config['home_assistant']['entities']['home_occupied']
+HA_EVENT_COUNTER = config['home_assistant']['entities'].get('event_counter')  # Optional
+HA_LAST_IMAGE_URL = config['home_assistant']['entities'].get('last_image_url')  # Optional
 CALLMEBOT_ENABLED = config['callmebot']['enabled']
 CALLMEBOT_API_URL = config['callmebot']['api_url']
 CALLMEBOT_PHONE = config['callmebot']['phone']
@@ -149,6 +151,36 @@ def send_sms(message):
     except Exception as e:
         logger.error(f"Error sending SMS: {e}")
 
+def increment_ha_counter(entity_id):
+    """Increment Home Assistant counter"""
+    try:
+        url = f"{HA_URL}/api/services/counter/increment"
+        headers = {
+            "Authorization": f"Bearer {HA_TOKEN}",
+            "Content-Type": "application/json"
+        }
+        data = {"entity_id": entity_id}
+        response = requests.post(url, headers=headers, json=data, timeout=5)
+        response.raise_for_status()
+        logger.info(f"Incremented counter {entity_id}")
+    except Exception as e:
+        logger.error(f"Error incrementing counter {entity_id}: {e}")
+
+def set_ha_input_text(entity_id, value):
+    """Set Home Assistant input_text value"""
+    try:
+        url = f"{HA_URL}/api/services/input_text/set_value"
+        headers = {
+            "Authorization": f"Bearer {HA_TOKEN}",
+            "Content-Type": "application/json"
+        }
+        data = {"entity_id": entity_id, "value": value}
+        response = requests.post(url, headers=headers, json=data, timeout=5)
+        response.raise_for_status()
+        logger.info(f"Set {entity_id} to: {value}")
+    except Exception as e:
+        logger.error(f"Error setting {entity_id}: {e}")
+
 @app.route('/motion', methods=['GET', 'POST'])
 def handle_motion():
     """Handle motion detection webhook from Blue Iris"""
@@ -225,6 +257,12 @@ def handle_motion():
             if result.lower() != "none":
                 # Prepend location to announcement for clarity
                 announcement = f"{location}: {result}"
+
+                # Update HA entities if configured
+                if HA_EVENT_COUNTER:
+                    increment_ha_counter(HA_EVENT_COUNTER)
+                if HA_LAST_IMAGE_URL:
+                    set_ha_input_text(HA_LAST_IMAGE_URL, jpeg_url)
 
                 # Check voice announcements control
                 should_announce_voice = check_ha_entity_state(HA_VOICE_ENTITY)
