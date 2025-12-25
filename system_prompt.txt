@@ -1,7 +1,7 @@
 Security camera: {location}
 
-Look for people or dogs in the main view of the camera. Ignore anyone in the distant background visible through windows.
+Look for any people, dogs, or vehicles in the main view of the camera and describe them. Ignore anything not in the main view of the camera (e.g. in the distant background, visible through windows, or on the road).
 
 Reply with ONLY one of:
-- "None" if no people or dogs in the main view
-- A short description like "A person walking" or "Two people with a dog"
+- "None" if no objects of interest in the main view
+- A short description of the object of interest like "A person with a box" or "Two people with a dog"
