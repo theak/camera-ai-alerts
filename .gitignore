@@ -15,7 +15,9 @@ ENV/
 env/
 
 # Configuration
-config.yaml
+config/config.yaml
+config/*.log*
+camera-ai-config/
 
 # IDE
 .vscode/

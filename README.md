@@ -22,15 +22,16 @@ Pre-built multi-architecture images are available on Docker Hub supporting AMD64
 ### Quick Start with Docker Run
 
 ```bash
-# 1. Create config file
-curl -o config.yaml https://raw.githubusercontent.com/theak/camera-ai-alerts/refs/heads/main/config.example.yaml
-# Edit config.yaml with your settings
+# 1. Download config example
+mkdir -p camera-ai-config
+curl -o camera-ai-config/config.yaml https://raw.githubusercontent.com/theak/camera-ai-alerts/refs/heads/main/config/config.example.yaml
+# Edit camera-ai-config/config.yaml with your settings
 
 # 2. Run container
 docker run -d \
   --name motion-detection \
   -p 5427:5427 \
-  -v $(pwd)/config.yaml:/app/config.yaml \
+  -v $(pwd)/camera-ai-config:/app/config \
   -e GOOGLE_API_KEY=your_key_here \
   -e HA_TOKEN=your_token_here \
   --restart unless-stopped \
@@ -43,9 +44,10 @@ docker run -d \
 # 1. Download compose file
 curl -o docker-compose.yml https://raw.githubusercontent.com/theak/camera-ai-alerts/refs/heads/main/docker-compose.yml
 
-# 2. Create config
-curl -o config.yaml https://raw.githubusercontent.com/theak/camera-ai-alerts/refs/heads/main/config.example.yaml
-# Edit config.yaml with your settings
+# 2. Download config example
+mkdir -p camera-ai-config
+curl -o camera-ai-config/config.yaml https://raw.githubusercontent.com/theak/camera-ai-alerts/refs/heads/main/config/config.example.yaml
+# Edit camera-ai-config/config.yaml with your settings
 
 # 3. Set secrets and run
 export GOOGLE_API_KEY=your_key_here
@@ -62,9 +64,10 @@ Only needed if you want to modify the code or build locally.
 git clone https://github.com/theak/camera-ai-alerts.git
 cd camera-ai-alerts
 
-# 2. Copy and edit config
-cp config.example.yaml config.yaml
-# Edit config.yaml with your Home Assistant and CallMeBot settings
+# 2. Copy example config to host directory
+mkdir -p camera-ai-config
+cp config/config.example.yaml camera-ai-config/config.yaml
+# Edit camera-ai-config/config.yaml with your settings
 
 # 3. Build and run
 export GOOGLE_API_KEY=your_key_here
@@ -75,9 +78,23 @@ docker-compose up -d
 
 ## Configuration
 
-Copy `config.example.yaml` to `config.yaml` and customize it. The config file supports `$VAR` syntax for environment variables (secrets only).
+For Docker users: Copy `config/config.example.yaml` to `camera-ai-config/config.yaml` and customize it.
+
+For local development: Copy `config/config.example.yaml` to `config/config.yaml`.
+
+The config file supports `$VAR` syntax for environment variables (secrets only).
 
 Edit `system_prompt.txt` to customize AI detection behavior.
+
+## Logs
+
+Logs are written to both stdout (visible with `docker logs`) and to `motion_server.log` in the mounted config directory. Log files are automatically rotated at 10MB with 5 backup files kept.
+
+**View logs:**
+```bash
+docker logs -f motion-detection
+tail -f camera-ai-config/motion_server.log
+```
 
 ## Blue Iris Configuration
 
@@ -109,5 +126,14 @@ http://your-server-ip:5427/motion
 ### Running Without Docker
 
 ```bash
+# 1. Copy example config
+cp config/config.example.yaml config/config.yaml
+# Edit config/config.yaml
+
+# 2. Set environment variables
+export GOOGLE_API_KEY=your_key_here
+export HA_TOKEN=your_token_here
+
+# 3. Run server
 uv run --with-requirements requirements.txt motion_server.py
 ```

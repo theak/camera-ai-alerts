@@ -32,7 +32,7 @@ README.md
 LICENSE
 
 # Configuration (will be mounted as volume)
-config.yaml
+config/
 
 # Utilities
 list_models.py

@@ -4,7 +4,7 @@ services:
     ports:
       - "5427:5427"
     volumes:
-      - ./config.yaml:/app/config.yaml
+      - ./camera-ai-config:/app/config
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - HA_TOKEN=${HA_TOKEN}

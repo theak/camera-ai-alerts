@@ -8,6 +8,7 @@ import os
 import sys
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from threading import Lock
 from string import Template
@@ -19,19 +20,26 @@ from google.genai import types
 from announce import ha_speak
 
 # Configure logging
+os.makedirs('config', exist_ok=True)
+handlers = [
+    logging.StreamHandler(sys.stdout),
+    RotatingFileHandler(
+        'config/motion_server.log',
+        maxBytes=10*1024*1024,  # 10MB
+        backupCount=5
+    )
+]
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
+    handlers=handlers
 )
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
 # Load configuration with environment variable interpolation
-with open('config.yaml', 'r') as f:
+with open('config/config.yaml', 'r') as f:
     template = Template(f.read())
     config = yaml.safe_load(template.substitute(os.environ))
 
