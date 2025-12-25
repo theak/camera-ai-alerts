@@ -1,6 +1,7 @@
 """Home Assistant integration."""
 
 import logging
+
 import requests
 
 logger = logging.getLogger(__name__)
@@ -17,11 +18,11 @@ class HomeAssistant:
             url: Home Assistant URL (e.g., http://homeassistant.local:8123)
             token: Home Assistant long-lived access token
         """
-        self.url = url.rstrip('/')
+        self.url = url.rstrip("/")
         self.token = token
         self.headers = {
             "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
 
     def speak(self, message: str, entity_id: str) -> None:
@@ -34,11 +35,8 @@ class HomeAssistant:
         """
         try:
             url = f"{self.url}/api/services/assist_satellite/announce"
-            data = {
-                "entity_id": entity_id,
-                "message": message
-            }
-            response = requests.post(url, headers=self.headers, json=data, timeout=5)
+            data = {"entity_id": entity_id, "message": message}
+            response = requests.post(url, headers=self.headers, json=data, timeout=30)
             response.raise_for_status()
             logger.info(f"HA Speaking: '{message}'")
         except Exception as e:
@@ -58,8 +56,8 @@ class HomeAssistant:
             url = f"{self.url}/api/states/{entity_id}"
             response = requests.get(url, headers=self.headers, timeout=5)
             response.raise_for_status()
-            state = response.json().get('state', '').lower()
-            return state == 'on'
+            state = response.json().get("state", "").lower()
+            return state == "on"
         except Exception as e:
             logger.error(f"Error checking HA entity {entity_id}: {e}")
             return False  # Default to off on error
@@ -96,3 +94,16 @@ class HomeAssistant:
             logger.info(f"Set {entity_id} to: {value}")
         except Exception as e:
             logger.error(f"Error setting {entity_id}: {e}")
+
+
+if __name__ == "__main__":
+    import os
+
+    # Test with environment variables
+    ha = HomeAssistant(
+        os.getenv("HA_URL", "http://homeassistant.local:8123"),
+        os.getenv("HA_TOKEN", ""),
+    )
+    ha.speak(
+        "hello world", os.getenv("HA_ANNOUNCE_ENTITY", "assist_satellite.living_room")
+    )
