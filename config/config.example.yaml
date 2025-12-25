@@ -13,6 +13,7 @@ home_assistant:
     home_occupied: "input_boolean.home_occupied" # Controls if SMS sends (off = send SMS)
     # event_counter: "counter.ai_camera_events" # Optional: Counter incremented on each detection
     # last_image_url: "input_text.ai_camera_last_image_url" # Optional: Stores jpegUrl of last detection
+    # last_event_description: "input_text.ai_camera_last_event_description" # Optional: Stores location + event description
 
 # CallMeBot SMS Configuration
 callmebot:

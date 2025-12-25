@@ -18,7 +18,8 @@ from requests.auth import HTTPDigestAuth
 import yaml
 from google import genai
 from google.genai import types
-from announce import ha_speak
+from ha import HomeAssistant
+from notifications import CallMeBotSMS
 
 # Configure logging
 os.makedirs('config', exist_ok=True)
@@ -54,6 +55,7 @@ HA_VOICE_ENTITY = config['home_assistant']['entities']['voice_announcements']
 HA_HOME_OCCUPIED_ENTITY = config['home_assistant']['entities']['home_occupied']
 HA_EVENT_COUNTER = config['home_assistant']['entities'].get('event_counter')  # Optional
 HA_LAST_IMAGE_URL = config['home_assistant']['entities'].get('last_image_url')  # Optional
+HA_LAST_EVENT_DESC = config['home_assistant']['entities'].get('last_event_description')  # Optional
 CALLMEBOT_ENABLED = config['callmebot']['enabled']
 CALLMEBOT_API_URL = config['callmebot']['api_url']
 CALLMEBOT_PHONE = config['callmebot']['phone']
@@ -71,6 +73,10 @@ if not HA_TOKEN:
 
 # Configure Gemini client
 client = genai.Client(api_key=GEMINI_API_KEY)
+
+# Initialize Home Assistant and notification clients
+ha = HomeAssistant(HA_URL, HA_TOKEN)
+sms = CallMeBotSMS(CALLMEBOT_API_URL, CALLMEBOT_PHONE, CALLMEBOT_API_KEY) if CALLMEBOT_ENABLED else None
 
 # Rate limiting configuration
 last_processed = {}  # location -> timestamp
@@ -134,62 +140,6 @@ def analyze_image(image_data, location):
     except Exception as e:
         logger.error(f"Error analyzing image with Gemini: {e}")
         raise
-
-def check_ha_entity_state(entity_id):
-    """Check if Home Assistant entity is 'on'"""
-    try:
-        url = f"{HA_URL}/api/states/{entity_id}"
-        headers = {
-            "Authorization": f"Bearer {HA_TOKEN}",
-            "Content-Type": "application/json"
-        }
-        response = requests.get(url, headers=headers, timeout=5)
-        response.raise_for_status()
-        state = response.json().get('state', '').lower()
-        return state == 'on'
-    except Exception as e:
-        logger.error(f"Error checking HA entity {entity_id}: {e}")
-        return False  # Default to off on error
-
-def send_sms(message):
-    """Send SMS via CallMeBot"""
-    try:
-        url = f"{CALLMEBOT_API_URL}?phone={CALLMEBOT_PHONE}&text={requests.utils.quote(message)}&apikey={CALLMEBOT_API_KEY}"
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        logger.info(f"SMS sent successfully")
-    except Exception as e:
-        logger.error(f"Error sending SMS: {e}")
-
-def increment_ha_counter(entity_id):
-    """Increment Home Assistant counter"""
-    try:
-        url = f"{HA_URL}/api/services/counter/increment"
-        headers = {
-            "Authorization": f"Bearer {HA_TOKEN}",
-            "Content-Type": "application/json"
-        }
-        data = {"entity_id": entity_id}
-        response = requests.post(url, headers=headers, json=data, timeout=5)
-        response.raise_for_status()
-        logger.info(f"Incremented counter {entity_id}")
-    except Exception as e:
-        logger.error(f"Error incrementing counter {entity_id}: {e}")
-
-def set_ha_input_text(entity_id, value):
-    """Set Home Assistant input_text value"""
-    try:
-        url = f"{HA_URL}/api/services/input_text/set_value"
-        headers = {
-            "Authorization": f"Bearer {HA_TOKEN}",
-            "Content-Type": "application/json"
-        }
-        data = {"entity_id": entity_id, "value": value}
-        response = requests.post(url, headers=headers, json=data, timeout=5)
-        response.raise_for_status()
-        logger.info(f"Set {entity_id} to: {value}")
-    except Exception as e:
-        logger.error(f"Error setting {entity_id}: {e}")
 
 @app.route('/motion', methods=['GET', 'POST'])
 def handle_motion():
@@ -270,25 +220,27 @@ def handle_motion():
 
                 # Update HA entities if configured
                 if HA_EVENT_COUNTER:
-                    increment_ha_counter(HA_EVENT_COUNTER)
+                    ha.increment_counter(HA_EVENT_COUNTER)
                 if HA_LAST_IMAGE_URL:
-                    set_ha_input_text(HA_LAST_IMAGE_URL, jpeg_url)
+                    ha.set_input_text(HA_LAST_IMAGE_URL, jpeg_url)
+                if HA_LAST_EVENT_DESC:
+                    ha.set_input_text(HA_LAST_EVENT_DESC, announcement)
 
                 # Check voice announcements control
-                should_announce_voice = check_ha_entity_state(HA_VOICE_ENTITY)
+                should_announce_voice = ha.check_entity_state(HA_VOICE_ENTITY)
                 if should_announce_voice:
                     logger.info(f"Voice announcement: {announcement}")
-                    ha_speak(announcement, HA_URL, HA_TOKEN, HA_ANNOUNCE_ENTITY)
+                    ha.speak(announcement, HA_ANNOUNCE_ENTITY)
                 else:
                     logger.info("Voice announcements disabled")
 
                 # Check if we should send SMS (when not home)
-                is_home = check_ha_entity_state(HA_HOME_OCCUPIED_ENTITY)
-                if CALLMEBOT_ENABLED and not is_home:
+                is_home = ha.check_entity_state(HA_HOME_OCCUPIED_ENTITY)
+                if sms and not is_home:
                     logger.info(f"Sending SMS: {announcement}")
-                    send_sms(announcement)
+                    sms.send(announcement)
                 else:
-                    logger.info(f"SMS skipped (home={is_home}, enabled={CALLMEBOT_ENABLED})")
+                    logger.info(f"SMS skipped (home={is_home}, enabled={sms is not None})")
 
             return jsonify({
                 "location": location,
