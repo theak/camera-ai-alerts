@@ -10,9 +10,12 @@ import json
 import logging
 from datetime import datetime
 from threading import Lock
+from string import Template
 from flask import Flask, request, jsonify
 import requests
-import google.generativeai as genai
+import yaml
+from google import genai
+from google.genai import types
 from announce import ha_speak
 
 # Configure logging
@@ -27,23 +30,47 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+# Load configuration with environment variable interpolation
+with open('config.yaml', 'r') as f:
+    template = Template(f.read())
+    config = yaml.safe_load(template.substitute(os.environ))
+
+# Extract config values
+GEMINI_MODEL = config['gemini']['model']
+GEMINI_API_KEY = config['gemini']['api_key']
+HA_URL = config['home_assistant']['url']
+HA_TOKEN = config['home_assistant']['token']
+HA_ANNOUNCE_ENTITY = config['home_assistant']['entities']['announce']
+HA_VOICE_ENTITY = config['home_assistant']['entities']['voice_announcements']
+HA_HOME_OCCUPIED_ENTITY = config['home_assistant']['entities']['home_occupied']
+CALLMEBOT_ENABLED = config['callmebot']['enabled']
+CALLMEBOT_API_URL = config['callmebot']['api_url']
+CALLMEBOT_PHONE = config['callmebot']['phone']
+CALLMEBOT_API_KEY = config['callmebot']['api_key']
+COOLDOWN_SECONDS = config['rate_limiting']['cooldown_seconds']
+SYSTEM_PROMPT_FILE = config['system_prompt_file']
+
+# Validate required secrets
+if not GEMINI_API_KEY:
+    logger.error("ERROR: GOOGLE_API_KEY environment variable not set")
+    sys.exit(1)
+if not HA_TOKEN:
+    logger.error("ERROR: HA_TOKEN environment variable not set")
+    sys.exit(1)
+
+# Configure Gemini client
+client = genai.Client(api_key=GEMINI_API_KEY)
+
 # Rate limiting configuration
-COOLDOWN_SECONDS = 30
 last_processed = {}  # location -> timestamp
 cooldown_lock = Lock()
 
-# Get API key from environment
-GEMINI_API_KEY = os.getenv('GOOGLE_API_KEY') or os.getenv('GEMINI_API_KEY')
-if not GEMINI_API_KEY:
-    logger.error("ERROR: GOOGLE_API_KEY or GEMINI_API_KEY environment variable not set")
-    sys.exit(1)
-
-# Configure Gemini
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-2.0-flash-exp')
+# In-flight request tracking (prevents thundering herd)
+processing_locations = set()
+processing_lock = Lock()
 
 # Load system prompt template
-with open('system_prompt.txt', 'r') as f:
+with open(SYSTEM_PROMPT_FILE, 'r') as f:
     SYSTEM_PROMPT_TEMPLATE = f.read()
 
 def is_in_cooldown(location):
@@ -75,17 +102,44 @@ def fetch_image(url, username=None, password=None):
 def analyze_image(image_data, location):
     """Send image to Gemini for analysis"""
     try:
-        # Create prompt from template
         prompt = SYSTEM_PROMPT_TEMPLATE.format(location=location)
+        image_part = types.Part.from_bytes(data=image_data, mime_type='image/jpeg')
 
-        # Send to Gemini
-        response = model.generate_content([prompt, {"mime_type": "image/jpeg", "data": image_data}])
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=[prompt, image_part]
+        )
 
-        result = response.text.strip()
-        return result
+        return response.text.strip()
     except Exception as e:
         logger.error(f"Error analyzing image with Gemini: {e}")
         raise
+
+def check_ha_entity_state(entity_id):
+    """Check if Home Assistant entity is 'on'"""
+    try:
+        url = f"{HA_URL}/api/states/{entity_id}"
+        headers = {
+            "Authorization": f"Bearer {HA_TOKEN}",
+            "Content-Type": "application/json"
+        }
+        response = requests.get(url, headers=headers, timeout=5)
+        response.raise_for_status()
+        state = response.json().get('state', '').lower()
+        return state == 'on'
+    except Exception as e:
+        logger.error(f"Error checking HA entity {entity_id}: {e}")
+        return False  # Default to off on error
+
+def send_sms(message):
+    """Send SMS via CallMeBot"""
+    try:
+        url = f"{CALLMEBOT_API_URL}?phone={CALLMEBOT_PHONE}&text={requests.utils.quote(message)}&apikey={CALLMEBOT_API_KEY}"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        logger.info(f"SMS sent successfully")
+    except Exception as e:
+        logger.error(f"Error sending SMS: {e}")
 
 @app.route('/motion', methods=['GET', 'POST'])
 def handle_motion():
@@ -122,44 +176,73 @@ def handle_motion():
                 "timestamp": datetime.now().isoformat()
             })
 
-        if not jpeg_url:
-            error_msg = "Missing jpegUrl parameter"
-            logger.error(error_msg)
-            return jsonify({"error": error_msg}), 400
+        # Check if already processing this location (prevents thundering herd)
+        with processing_lock:
+            if location in processing_locations:
+                logger.info(f"Skipping {location} - already processing")
+                return jsonify({
+                    "location": location,
+                    "result": "skipped_in_progress",
+                    "timestamp": datetime.now().isoformat()
+                })
+            processing_locations.add(location)
 
-        # Fetch the image
-        logger.info(f"Fetching image from {jpeg_url}")
-        image_data = fetch_image(jpeg_url, username, password)
-
-        # Save the image to tmp.jpg for debugging
-        with open('tmp.jpg', 'wb') as f:
-            f.write(image_data)
-
-        # Analyze with Gemini
-        logger.info(f"Analyzing image from {location} with Gemini...")
-        result = analyze_image(image_data, location)
-
-        # Update cooldown tracker
+        # Update cooldown tracker immediately (before slow Gemini call)
         update_last_processed(location)
 
-        # Log the result
-        logger.info(f"=== GEMINI RESPONSE for {location} ===")
-        logger.info(f"{result}")
-        logger.info(f"=" * 50)
+        try:
+            if not jpeg_url:
+                error_msg = "Missing jpegUrl parameter"
+                logger.error(error_msg)
+                return jsonify({"error": error_msg}), 400
 
-        # Announce via Home Assistant if something detected
-        if result.lower() != "none":
-            # Prepend location to announcement for clarity
-            announcement = f"{location}: {result}"
-            logger.info("Announcing:")
-            logger.info(announcement)
-            ha_speak(announcement)
+            # Fetch the image
+            logger.info(f"Fetching image from {jpeg_url}")
+            image_data = fetch_image(jpeg_url, username, password)
 
-        return jsonify({
-            "location": location,
-            "result": result,
-            "timestamp": datetime.now().isoformat()
-        })
+            # Save the image to tmp.jpg for debugging
+            with open('tmp.jpg', 'wb') as f:
+                f.write(image_data)
+
+            # Analyze with Gemini
+            logger.info(f"Analyzing image from {location} with Gemini...")
+            result = analyze_image(image_data, location)
+
+            # Log the result
+            logger.info(f"=== GEMINI RESPONSE for {location} ===")
+            logger.info(f"{result}")
+            logger.info(f"=" * 50)
+
+            # Announce via Home Assistant if something detected
+            if result.lower() != "none":
+                # Prepend location to announcement for clarity
+                announcement = f"{location}: {result}"
+
+                # Check voice announcements control
+                should_announce_voice = check_ha_entity_state(HA_VOICE_ENTITY)
+                if should_announce_voice:
+                    logger.info(f"Voice announcement: {announcement}")
+                    ha_speak(announcement, HA_URL, HA_TOKEN, HA_ANNOUNCE_ENTITY)
+                else:
+                    logger.info("Voice announcements disabled")
+
+                # Check if we should send SMS (when not home)
+                is_home = check_ha_entity_state(HA_HOME_OCCUPIED_ENTITY)
+                if CALLMEBOT_ENABLED and not is_home:
+                    logger.info(f"Sending SMS: {announcement}")
+                    send_sms(announcement)
+                else:
+                    logger.info(f"SMS skipped (home={is_home}, enabled={CALLMEBOT_ENABLED})")
+
+            return jsonify({
+                "location": location,
+                "result": result,
+                "timestamp": datetime.now().isoformat()
+            })
+        finally:
+            # Clear in-flight tracking
+            with processing_lock:
+                processing_locations.discard(location)
 
     except Exception as e:
         logger.exception(f"Error processing motion request: {e}")
@@ -173,4 +256,9 @@ def health():
 if __name__ == '__main__':
     logger.info("Starting motion detection server...")
     logger.info(f"Gemini API configured: {'✓' if GEMINI_API_KEY else '✗'}")
-    app.run(host='0.0.0.0', port=5427, debug=False)
+    logger.info(f"Model: {GEMINI_MODEL}")
+    app.run(
+        host=config['server']['host'],
+        port=config['server']['port'],
+        debug=False
+    )

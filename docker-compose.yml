@@ -3,9 +3,9 @@ services:
     build: .
     ports:
       - "5427:5427"
+    volumes:
+      - ./config.yaml:/app/config.yaml
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - HA_URL=${HA_URL}
       - HA_TOKEN=${HA_TOKEN}
-      - HA_ANNOUNCE_ENTITY=${HA_ANNOUNCE_ENTITY}
     restart: unless-stopped

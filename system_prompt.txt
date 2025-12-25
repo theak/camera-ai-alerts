@@ -1,7 +1,7 @@
 Security camera: {location}
 
-Look for people, dogs, or cats in the main view of the camera. Ignore anyone in the distant background visible through windows.
+Look for people or dogs in the main view of the camera. Ignore anyone in the distant background visible through windows.
 
 Reply with ONLY one of:
-- "None" if no people, dogs, or cats in the main view
+- "None" if no people or dogs in the main view
 - A short description like "A person walking" or "Two people with a dog"

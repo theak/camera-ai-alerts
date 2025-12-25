@@ -1,20 +1,19 @@
-import os
 import json
 import urllib.request
 import urllib.error
 
-def ha_speak(message: str) -> None:
+def ha_speak(message: str, base_url: str, token: str, entity_id: str) -> None:
     """
     Sends a text message to Home Assistant to be spoken by the Assist Satellite.
-    Relies on HA_URL, HA_TOKEN, and HA_ANNOUNCE_ENTITY env vars.
-    """
-    # 1. Load Configuration
-    token = os.getenv("HA_TOKEN")
-    base_url = os.getenv("HA_URL")
-    entity_id = os.getenv("HA_ANNOUNCE_ENTITY")
 
+    Args:
+        message: The text message to speak
+        base_url: Home Assistant URL (e.g., http://homeassistant.local:8123)
+        token: Home Assistant long-lived access token
+        entity_id: Assist Satellite entity ID (e.g., assist_satellite.living_room)
+    """
     if not all([token, base_url, entity_id]):
-        print("❌ Error: Missing required env vars (HA_TOKEN, HA_URL, or HA_ANNOUNCE_ENTITY).")
+        print("❌ Error: Missing required parameters (token, base_url, or entity_id).")
         return
 
     # 2. Prepare the Request
@@ -54,5 +53,11 @@ def ha_speak(message: str) -> None:
 
 # --- Example Usage ---
 if __name__ == "__main__":
-    # Test call
-    ha_speak("Hello world")
+    import os
+    # Test call - requires env vars for testing
+    ha_speak(
+        "Hello world",
+        os.getenv("HA_URL", "http://homeassistant.local:8123"),
+        os.getenv("HA_TOKEN", ""),
+        os.getenv("HA_ANNOUNCE_ENTITY", "")
+    )

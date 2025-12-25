@@ -1,0 +1,32 @@
+# Gemini Configuration
+gemini:
+  model: "gemini-2.0-flash-exp" # Run `python list_models.py` to get the full list
+  api_key: $GOOGLE_API_KEY
+
+# Home Assistant Configuration
+home_assistant:
+  url: "http://homeassistant.local:8123"
+  token: $HA_TOKEN
+  entities:
+    announce: "assist_satellite.living_room"
+    voice_announcements: "input_boolean.voice_announcements" # Controls if voice announces
+    home_occupied: "input_boolean.home_occupied" # Controls if SMS sends (off = send SMS)
+
+# CallMeBot SMS Configuration
+callmebot:
+  enabled: true
+  api_url: "https://api.callmebot.com/whatsapp.php"
+  phone: "+1234567890"
+  api_key: "your_callmebot_api_key"
+
+# Rate Limiting
+rate_limiting:
+  cooldown_seconds: 30
+
+# Server Configuration
+server:
+  port: 5427
+  host: "0.0.0.0"
+
+# System Prompt
+system_prompt_file: "system_prompt.txt"
