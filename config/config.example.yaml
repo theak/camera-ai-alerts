@@ -8,7 +8,9 @@ home_assistant:
   url: "http://homeassistant.local:8123"
   token: $HA_TOKEN
   entities:
-    announce: "assist_satellite.living_room"
+    announce:
+      - "assist_satellite.living_room"
+      # - "assist_satellite.bedroom"  # Optional: Add more satellites
     voice_announcements: "input_boolean.voice_announcements" # Controls if voice announces
     home_occupied: "input_boolean.home_occupied" # Controls if SMS sends (off = send SMS)
     # event_counter: "counter.ai_camera_events" # Optional: Counter incremented on each detection
