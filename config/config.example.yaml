@@ -35,3 +35,7 @@ server:
 
 # System Prompt
 system_prompt_file: "system_prompt.txt"
+
+# Debug
+debug:
+  save_images: false  # Save last_scan.jpg and last_detection.jpg to config folder

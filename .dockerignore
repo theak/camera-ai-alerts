@@ -24,7 +24,6 @@ ENV/
 *.swo
 
 # Temporary files
-tmp.jpg
 *.tmp
 
 # Documentation

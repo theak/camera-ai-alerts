@@ -17,6 +17,8 @@ env/
 # Configuration
 config/config.yaml
 config/*.log*
+config/last_scan.jpg
+config/last_detection.jpg
 camera-ai-config/
 
 # IDE
@@ -30,5 +32,4 @@ camera-ai-config/
 Thumbs.db
 
 # Project specific
-tmp.jpg
 *.tmp

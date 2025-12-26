@@ -62,6 +62,7 @@ CALLMEBOT_PHONE = config['callmebot']['phone']
 CALLMEBOT_API_KEY = config['callmebot']['api_key']
 COOLDOWN_SECONDS = config['rate_limiting']['cooldown_seconds']
 SYSTEM_PROMPT_FILE = config['system_prompt_file']
+DEBUG_SAVE_IMAGES = config.get('debug', {}).get('save_images', False)
 
 # Validate required secrets
 if not GEMINI_API_KEY:
@@ -200,9 +201,10 @@ def handle_motion():
             logger.info(f"Fetching image from {jpeg_url}")
             image_data = fetch_image(jpeg_url, username, password)
 
-            # Save the image to tmp.jpg for debugging
-            with open('tmp.jpg', 'wb') as f:
-                f.write(image_data)
+            # Save last scan image for debugging
+            if DEBUG_SAVE_IMAGES:
+                with open('config/last_scan.jpg', 'wb') as f:
+                    f.write(image_data)
 
             # Analyze with Gemini
             logger.info(f"Analyzing image from {location} with Gemini...")
@@ -215,6 +217,11 @@ def handle_motion():
 
             # Announce via Home Assistant if something detected
             if result.lower() != "none":
+                # Save last detection image for debugging
+                if DEBUG_SAVE_IMAGES:
+                    with open('config/last_detection.jpg', 'wb') as f:
+                        f.write(image_data)
+
                 # Prepend location to announcement for clarity
                 announcement = f"{location}: {result}"
 
