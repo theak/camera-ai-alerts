@@ -1,6 +1,6 @@
 # IP Camera Motion Detection AI Notifier
 
-AI-powered server that handles webhooks from security cameras (or an NVR like BlueIris / ZoneMinder) when motion is detected, sends the camera image to an LLM using a system prompt, and sends notifications to Home Assistant and optionally via WhatsApp if interesting activity is detected.
+AI-powered server that handles webhooks from security cameras (or an NVR like BlueIris / ZoneMinder) when motion is detected, sends the camera image to an LLM using a system prompt, and sends notifications to Home Assistant and optionally via WhatsApp if interesting activity is detected with a description of the scene.
 
 ## Configuration
 
