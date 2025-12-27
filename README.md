@@ -4,12 +4,14 @@ AI-powered server that handles webhooks from security cameras (or an NVR like Bl
 
 ## Configuration
 
-See [config/config.example.yaml] for configuration details. The config file supports `$VAR` syntax for environment variables. Edit `system_prompt.txt` to customize AI detection behavior.
+See [config.yaml](config/config.example.yaml) for configuration details. 
+
+The config file supports `$VAR` syntax for environment variables.
 
 ### How I've configured it
 
 1. Blue Iris detects motion and sends a webhook to this server
-2. This server fetches the image from the camera URL and sends it to Gemini to analyze using [system_prompt.txt], looking for activity in the main view
+2. This server fetches the image from the camera URL and sends it to Gemini to analyze using [system_prompt.txt](system_prompt.txt), looking for activity in the main view
 3. If activity detected: Announces via Home Assistant and sends me a WhatsApp message if I'm not home (configurable via Home Assistant entity)
 
 ## Requirements
@@ -55,6 +57,8 @@ export HA_TOKEN=your_token_here
 docker-compose up -d
 ```
 
+### Webhook to analyze footage with LLM
+
 **URL:**
 ```
 http://your-server-ip:5427/motion
@@ -72,7 +76,7 @@ http://your-server-ip:5427/motion
 
 ## Building from Source
 
-Only needed if you want to modify the code or run locally without docker.
+Only needed if you want to modify the code or run without Docker.
 
 ```bash
 # 1. Clone and enter directory
@@ -103,4 +107,4 @@ Logs are written to both stdout (visible with `docker logs`) and to `motion_serv
 2. Go to the "Alerts" tab
 3. Click "On alert..." button
 4. Add a "Web request or MQTT" action
-5. Configure the webhook:
+5. [Configure the webhook](#webhook-to-analyze-footage-with-llm)
