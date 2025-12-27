@@ -9,7 +9,6 @@ import sys
 import json
 import logging
 from logging.handlers import RotatingFileHandler
-from datetime import datetime
 from threading import Lock
 from string import Template
 from collections import defaultdict
@@ -48,23 +47,29 @@ with open('config/config.yaml', 'r') as f:
     config = yaml.safe_load(template.substitute(os.environ))
 
 # Extract config values
-GEMINI_MODEL = config['gemini']['model']
-GEMINI_API_KEY = config['gemini']['api_key']
-HA_URL = config['home_assistant']['url']
-HA_TOKEN = config['home_assistant']['token']
-HA_ANNOUNCE_ENTITY = config['home_assistant']['entities']['announce']
-HA_VOICE_ENTITY = config['home_assistant']['entities']['voice_announcements']
-HA_HOME_OCCUPIED_ENTITY = config['home_assistant']['entities']['home_occupied']
-HA_EVENT_COUNTER = config['home_assistant']['entities'].get('event_counter')  # Optional
-HA_LAST_IMAGE_URL = config['home_assistant']['entities'].get('last_image_url')  # Optional
-HA_LAST_EVENT_DESC = config['home_assistant']['entities'].get('last_event_description')  # Optional
-CALLMEBOT_ENABLED = config['callmebot']['enabled']
-CALLMEBOT_API_URL = config['callmebot']['api_url']
-CALLMEBOT_PHONE = config['callmebot']['phone']
-CALLMEBOT_API_KEY = config['callmebot']['api_key']
-COOLDOWN_SECONDS = config['rate_limiting']['cooldown_seconds']
-VOICE_ANNOUNCEMENT_COOLDOWN = config.get('rate_limiting', {}).get('voice_announcement_cooldown_seconds')
-SMS_COOLDOWN = config.get('rate_limiting', {}).get('sms_cooldown_seconds')
+gemini = config['gemini']
+ha_config = config['home_assistant']
+ha_entities = ha_config['entities']
+callmebot = config['callmebot']
+rate_limiting = config['rate_limiting']
+
+GEMINI_MODEL = gemini['model']
+GEMINI_API_KEY = gemini['api_key']
+HA_URL = ha_config['url']
+HA_TOKEN = ha_config['token']
+HA_ANNOUNCE_ENTITY = ha_entities['announce']
+HA_VOICE_ENTITY = ha_entities['voice_announcements']
+HA_HOME_OCCUPIED_ENTITY = ha_entities['home_occupied']
+HA_EVENT_COUNTER = ha_entities.get('event_counter')
+HA_LAST_IMAGE_URL = ha_entities.get('last_image_url')
+HA_LAST_EVENT_DESC = ha_entities.get('last_event_description')
+CALLMEBOT_ENABLED = callmebot['enabled']
+CALLMEBOT_API_URL = callmebot['api_url']
+CALLMEBOT_PHONE = callmebot['phone']
+CALLMEBOT_API_KEY = callmebot['api_key']
+COOLDOWN_SECONDS = rate_limiting['cooldown_seconds']
+VOICE_ANNOUNCEMENT_COOLDOWN = rate_limiting.get('voice_announcement_cooldown_seconds')
+SMS_COOLDOWN = rate_limiting.get('sms_cooldown_seconds')
 SYSTEM_PROMPT_FILE = config['system_prompt_file']
 DEBUG_SAVE_IMAGES = config.get('debug', {}).get('save_images', False)
 
@@ -146,7 +151,7 @@ def handle_motion():
                 # Try to parse form data or raw body
                 try:
                     data = json.loads(request.data.decode('utf-8'))
-                except:
+                except Exception:
                     data = request.form.to_dict()
         else:  # GET
             data = request.args.to_dict()
@@ -165,8 +170,7 @@ def handle_motion():
             logger.info(f"Skipping {location} - in cooldown period")
             return jsonify({
                 "location": location,
-                "result": "skipped_cooldown",
-                "timestamp": datetime.now().isoformat()
+                "result": "skipped_cooldown"
             })
 
         # Check if already processing this location (prevents thundering herd)
@@ -175,8 +179,7 @@ def handle_motion():
                 logger.info(f"Skipping {location} - already processing")
                 return jsonify({
                     "location": location,
-                    "result": "skipped_in_progress",
-                    "timestamp": datetime.now().isoformat()
+                    "result": "skipped_in_progress"
                 })
             processing_locations.add(location)
 
@@ -246,8 +249,7 @@ def handle_motion():
 
             return jsonify({
                 "location": location,
-                "result": result,
-                "timestamp": datetime.now().isoformat()
+                "result": result
             })
         finally:
             # Clear in-flight tracking
