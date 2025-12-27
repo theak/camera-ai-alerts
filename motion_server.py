@@ -60,6 +60,7 @@ HA_TOKEN = ha_config['token']
 HA_ANNOUNCE_ENTITY = ha_entities['announce']
 HA_VOICE_ENTITY = ha_entities['voice_announcements']
 HA_HOME_OCCUPIED_ENTITY = ha_entities['home_occupied']
+HA_ANALYSIS_COUNTER = ha_entities.get('analysis_counter')
 HA_EVENT_COUNTER = ha_entities.get('event_counter')
 HA_LAST_IMAGE_URL = ha_entities.get('last_image_url')
 HA_LAST_EVENT_DESC = ha_entities.get('last_event_description')
@@ -201,6 +202,10 @@ def handle_motion():
             # Analyze with Gemini
             logger.info(f"Analyzing image from {location} with Gemini...")
             result = analyze_image(image_data, location)
+
+            # Increment analysis counter if configured
+            if HA_ANALYSIS_COUNTER:
+                ha.increment_counter(HA_ANALYSIS_COUNTER)
 
             # Log the result
             logger.info(f"=== GEMINI RESPONSE for {location} ===")

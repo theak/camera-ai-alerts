@@ -13,6 +13,7 @@ home_assistant:
       # - "assist_satellite.bedroom"  # Optional: Add more satellites
     voice_announcements: "input_boolean.voice_announcements" # Controls if voice announces
     home_occupied: "input_boolean.home_occupied" # Controls if SMS sends (off = send SMS)
+    # analysis_counter: "counter.ai_camera_analyses" # Optional: Counter incremented on each LLM analysis
     # event_counter: "counter.ai_camera_events" # Optional: Counter incremented on each detection
     # last_image_url: "input_text.ai_camera_last_image_url" # Optional: Stores jpegUrl of last detection
     # last_event_description: "input_text.ai_camera_last_event_description" # Optional: Stores location + event description
