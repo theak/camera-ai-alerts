@@ -26,7 +26,9 @@ callmebot:
 
 # Rate Limiting
 rate_limiting:
-  cooldown_seconds: 30
+  cooldown_seconds: 30 # Rate limit on how often to call the LLM per location
+  # voice_announcement_cooldown_seconds: 60  # Optional: Global rate limit for voice announcements across all locations
+  # sms_cooldown_seconds: 300  # Optional: Global rate limit for SMS notifications across all locations
 
 # Server Configuration
 server:
@@ -38,4 +40,4 @@ system_prompt_file: "system_prompt.txt"
 
 # Debug
 debug:
-  save_images: false  # Save last_scan.jpg and last_detection.jpg to config folder
+  save_images: false # Save last_scan.jpg and last_detection.jpg to config folder

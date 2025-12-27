@@ -17,6 +17,7 @@ env/
 # Configuration
 config/config.yaml
 config/*.log*
+config/*.sh*
 config/last_scan.jpg
 config/last_detection.jpg
 camera-ai-config/

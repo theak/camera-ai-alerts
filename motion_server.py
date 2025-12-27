@@ -12,6 +12,7 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from threading import Lock
 from string import Template
+from collections import defaultdict
 from flask import Flask, request, jsonify
 import requests
 from requests.auth import HTTPDigestAuth
@@ -20,6 +21,7 @@ from google import genai
 from google.genai import types
 from ha import HomeAssistant
 from notifications import CallMeBotSMS
+from rate_limiter import RateLimiter
 
 # Configure logging
 os.makedirs('config', exist_ok=True)
@@ -61,6 +63,8 @@ CALLMEBOT_API_URL = config['callmebot']['api_url']
 CALLMEBOT_PHONE = config['callmebot']['phone']
 CALLMEBOT_API_KEY = config['callmebot']['api_key']
 COOLDOWN_SECONDS = config['rate_limiting']['cooldown_seconds']
+VOICE_ANNOUNCEMENT_COOLDOWN = config.get('rate_limiting', {}).get('voice_announcement_cooldown_seconds')
+SMS_COOLDOWN = config.get('rate_limiting', {}).get('sms_cooldown_seconds')
 SYSTEM_PROMPT_FILE = config['system_prompt_file']
 DEBUG_SAVE_IMAGES = config.get('debug', {}).get('save_images', False)
 
@@ -79,9 +83,10 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 ha = HomeAssistant(HA_URL, HA_TOKEN)
 sms = CallMeBotSMS(CALLMEBOT_API_URL, CALLMEBOT_PHONE, CALLMEBOT_API_KEY) if CALLMEBOT_ENABLED else None
 
-# Rate limiting configuration
-last_processed = {}  # location -> timestamp
-cooldown_lock = Lock()
+# Rate limiting
+location_limiters = defaultdict(lambda: RateLimiter(COOLDOWN_SECONDS))
+voice_limiter = RateLimiter(VOICE_ANNOUNCEMENT_COOLDOWN) if VOICE_ANNOUNCEMENT_COOLDOWN else None
+sms_limiter = RateLimiter(SMS_COOLDOWN) if SMS_COOLDOWN else None
 
 # In-flight request tracking (prevents thundering herd)
 processing_locations = set()
@@ -90,19 +95,6 @@ processing_lock = Lock()
 # Load system prompt template
 with open(SYSTEM_PROMPT_FILE, 'r') as f:
     SYSTEM_PROMPT_TEMPLATE = f.read()
-
-def is_in_cooldown(location):
-    """Check if location is within cooldown period"""
-    with cooldown_lock:
-        if location in last_processed:
-            elapsed = (datetime.now() - last_processed[location]).total_seconds()
-            return elapsed < COOLDOWN_SECONDS
-        return False
-
-def update_last_processed(location):
-    """Update the last processed timestamp for a location"""
-    with cooldown_lock:
-        last_processed[location] = datetime.now()
 
 def fetch_image(url, username=None, password=None):
     """Fetch image from URL with optional auth (tries Basic, then Digest)"""
@@ -169,7 +161,7 @@ def handle_motion():
         ignore_cooldown = data.get('ignoreCooldown', False)
 
         # Check cooldown (unless explicitly ignored)
-        if not ignore_cooldown and is_in_cooldown(location):
+        if not ignore_cooldown and not location_limiters[location].check_and_update():
             logger.info(f"Skipping {location} - in cooldown period")
             return jsonify({
                 "location": location,
@@ -187,9 +179,6 @@ def handle_motion():
                     "timestamp": datetime.now().isoformat()
                 })
             processing_locations.add(location)
-
-        # Update cooldown tracker immediately (before slow Gemini call)
-        update_last_processed(location)
 
         try:
             if not jpeg_url:
@@ -236,16 +225,22 @@ def handle_motion():
                 # Check voice announcements control
                 should_announce_voice = ha.check_entity_state(HA_VOICE_ENTITY)
                 if should_announce_voice:
-                    logger.info(f"Voice announcement: {announcement}")
-                    ha.speak(announcement, HA_ANNOUNCE_ENTITY)
+                    if not voice_limiter or voice_limiter.check_and_update():
+                        logger.info(f"Voice announcement: {announcement}")
+                        ha.speak(announcement, HA_ANNOUNCE_ENTITY)
+                    else:
+                        logger.info("Skipping voice announcement - in global cooldown")
                 else:
                     logger.info("Voice announcements disabled")
 
                 # Check if we should send SMS (when not home)
                 is_home = ha.check_entity_state(HA_HOME_OCCUPIED_ENTITY)
                 if sms and not is_home:
-                    logger.info(f"Sending SMS: {announcement}")
-                    sms.send(announcement)
+                    if not sms_limiter or sms_limiter.check_and_update():
+                        logger.info(f"Sending SMS: {announcement}")
+                        sms.send(announcement)
+                    else:
+                        logger.info("Skipping SMS - in global cooldown")
                 else:
                     logger.info(f"SMS skipped (home={is_home}, enabled={sms is not None})")
 
