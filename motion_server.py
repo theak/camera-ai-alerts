@@ -21,6 +21,7 @@ from google.genai import types
 from ha import HomeAssistant
 from notifications import CallMeBotSMS
 from rate_limiter import RateLimiter
+from gcs_backup import GCSBackup
 
 # Configure logging
 os.makedirs('config', exist_ok=True)
@@ -73,6 +74,10 @@ VOICE_ANNOUNCEMENT_COOLDOWN = rate_limiting.get('voice_announcement_cooldown_sec
 SMS_COOLDOWN = rate_limiting.get('sms_cooldown_seconds')
 SYSTEM_PROMPT_FILE = config['system_prompt_file']
 DEBUG_SAVE_IMAGES = config.get('debug', {}).get('save_images', False)
+GCS_ENABLED = config.get('google_cloud_storage', {}).get('enabled', False)
+GCS_BUCKET_NAME = config.get('google_cloud_storage', {}).get('bucket_name')
+GCS_SERVICE_ACCOUNT_JSON = config.get('google_cloud_storage', {}).get('service_account_json')
+GCS_BACKUP_CONTROL_ENTITY = config.get('google_cloud_storage', {}).get('backup_control_entity')
 
 # Validate required secrets
 if not GEMINI_API_KEY:
@@ -88,6 +93,15 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 # Initialize Home Assistant and notification clients
 ha = HomeAssistant(HA_URL, HA_TOKEN)
 sms = CallMeBotSMS(CALLMEBOT_API_URL, CALLMEBOT_PHONE, CALLMEBOT_API_KEY) if CALLMEBOT_ENABLED else None
+
+# Initialize GCS backup client if enabled
+gcs = None
+if GCS_ENABLED:
+    try:
+        gcs = GCSBackup(GCS_BUCKET_NAME, GCS_SERVICE_ACCOUNT_JSON)
+    except Exception as e:
+        logger.error(f"Failed to initialize GCS backup: {e}")
+        gcs = None
 
 # Rate limiting
 location_limiters = defaultdict(lambda: RateLimiter(COOLDOWN_SECONDS))
@@ -229,6 +243,19 @@ def handle_motion():
                     ha.set_input_text(HA_LAST_IMAGE_URL, jpeg_url)
                 if HA_LAST_EVENT_DESC:
                     ha.set_input_text(HA_LAST_EVENT_DESC, announcement)
+
+                # Backup to Google Cloud Storage if enabled
+                if gcs and GCS_BACKUP_CONTROL_ENTITY:
+                    should_backup = ha.check_entity_state(GCS_BACKUP_CONTROL_ENTITY)
+                    if should_backup:
+                        logger.info("Backing up detection image to GCS...")
+                        gcs.upload_image(image_data, location, result)
+                    else:
+                        logger.info("GCS backup disabled by HA entity")
+                elif gcs:
+                    # No control entity configured, always backup
+                    logger.info("Backing up detection image to GCS...")
+                    gcs.upload_image(image_data, location, result)
 
                 # Check voice announcements control
                 should_announce_voice = ha.check_entity_state(HA_VOICE_ENTITY)

@@ -42,3 +42,10 @@ system_prompt_file: "system_prompt.txt"
 # Debug
 debug:
   save_images: false # Save last_scan.jpg and last_detection.jpg to config folder
+
+# Google Cloud Storage Backup
+# google_cloud_storage:
+#   enabled: false  # Master switch for GCS feature
+#   bucket_name: "your_bucket_name"
+#   service_account_json: "gcs-service-account.json"  # Relative to config folder
+#   backup_control_entity: "input_boolean.ai_camera_cloud_backup"  # Optional: HA entity to control backups

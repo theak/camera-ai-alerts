@@ -20,6 +20,7 @@ config/*.log*
 config/*.sh*
 config/last_scan.jpg
 config/last_detection.jpg
+config/*.json
 camera-ai-config/
 
 # IDE
