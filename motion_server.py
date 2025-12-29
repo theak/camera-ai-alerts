@@ -236,26 +236,29 @@ def handle_motion():
                 # Prepend location to announcement for clarity
                 announcement = f"{location}: {result}"
 
-                # Update HA entities if configured
-                if HA_EVENT_COUNTER:
-                    ha.increment_counter(HA_EVENT_COUNTER)
-                if HA_LAST_IMAGE_URL:
-                    ha.set_input_text(HA_LAST_IMAGE_URL, jpeg_url)
-                if HA_LAST_EVENT_DESC:
-                    ha.set_input_text(HA_LAST_EVENT_DESC, announcement)
-
-                # Backup to Google Cloud Storage if enabled
+                # Backup to Google Cloud Storage if enabled (do this first to get GCS URL)
+                gcs_image_url = None
                 if gcs and GCS_BACKUP_CONTROL_ENTITY:
                     should_backup = ha.check_entity_state(GCS_BACKUP_CONTROL_ENTITY)
                     if should_backup:
                         logger.info("Backing up detection image to GCS...")
-                        gcs.upload_image(image_data, location, result)
+                        gcs_image_url = gcs.upload_image(image_data, location, result)
                     else:
                         logger.info("GCS backup disabled by HA entity")
                 elif gcs:
                     # No control entity configured, always backup
                     logger.info("Backing up detection image to GCS...")
-                    gcs.upload_image(image_data, location, result)
+                    gcs_image_url = gcs.upload_image(image_data, location, result)
+
+                # Update HA entities if configured
+                if HA_EVENT_COUNTER:
+                    ha.increment_counter(HA_EVENT_COUNTER)
+                if HA_LAST_IMAGE_URL:
+                    # Use GCS URL if available, otherwise use original jpeg_url
+                    image_url = gcs_image_url if gcs_image_url else jpeg_url
+                    ha.set_input_text(HA_LAST_IMAGE_URL, image_url)
+                if HA_LAST_EVENT_DESC:
+                    ha.set_input_text(HA_LAST_EVENT_DESC, announcement)
 
                 # Check voice announcements control
                 should_announce_voice = ha.check_entity_state(HA_VOICE_ENTITY)

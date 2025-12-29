@@ -68,7 +68,7 @@ class GCSBackup:
             result: Detection result from Gemini (e.g., "Person detected near mailbox")
 
         Returns:
-            True if upload succeeded, False otherwise
+            GCS public URL if upload succeeded, None otherwise
         """
         try:
             # Generate filename: timestamp_location_sanitizedresult.jpg
@@ -80,9 +80,12 @@ class GCSBackup:
             blob = self.bucket.blob(filename)
             blob.upload_from_string(image_data, content_type='image/jpeg')
 
-            logger.info(f"Uploaded image to GCS: {filename}")
-            return True
+            # Construct public GCS URL
+            gcs_url = f"https://storage.cloud.google.com/{self.bucket_name}/{filename}"
+
+            logger.info(f"Uploaded image to GCS: {gcs_url}")
+            return gcs_url
 
         except Exception as e:
             logger.error(f"Error uploading to GCS: {e}")
-            return False
+            return None
