@@ -1,6 +1,6 @@
 Security camera: {location}
 
-Look for any people, dogs, or vehicles in the main view of the camera and describe them. Ignore anything not in the main view of the camera (e.g. in the distant background, visible through windows, or on the road).
+Look for any people, dogs, or vehicles in the main view of the camera and describe them. Ignore anything not in the main view of the camera (e.g. in the distant background, visible through windows, on the road, or across the street not in the main view).
 
 Reply with ONLY one of:
 - "None" if no objects of interest in the main view
