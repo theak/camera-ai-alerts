@@ -305,7 +305,7 @@ def health():
 def debug_image(image_type):
     if not DEBUG_SAVE_IMAGES or image_type not in ('last_scan', 'last_detection'):
         return "Not found", 404
-    path = os.path.join(CONFIG_DIR, f'{image_type}.jpg')
+    path = f'config/{image_type}.jpg'
     return send_file(path) if os.path.exists(path) else ("Not found", 404)
 
 if __name__ == '__main__':
