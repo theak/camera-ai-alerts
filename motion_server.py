@@ -58,8 +58,8 @@ GEMINI_MODEL = gemini['model']
 GEMINI_API_KEY = gemini['api_key']
 HA_URL = ha_config['url']
 HA_TOKEN = ha_config['token']
-HA_ANNOUNCE_ENTITY = ha_entities['announce']
-HA_VOICE_ENTITY = ha_entities['voice_announcements']
+HA_ANNOUNCE_ENTITY = ha_entities.get('announce')
+HA_VOICE_ENTITY = ha_entities.get('voice_announcements')
 HA_HOME_OCCUPIED_ENTITY = ha_entities['home_occupied']
 HA_ANALYSIS_COUNTER = ha_entities.get('analysis_counter')
 HA_EVENT_COUNTER = ha_entities.get('event_counter')
@@ -260,16 +260,17 @@ def handle_motion():
                 if HA_LAST_EVENT_DESC:
                     ha.set_input_text(HA_LAST_EVENT_DESC, announcement)
 
-                # Check voice announcements control
-                should_announce_voice = ha.check_entity_state(HA_VOICE_ENTITY)
-                if should_announce_voice:
-                    if not voice_limiter or voice_limiter.check_and_update():
-                        logger.info(f"Voice announcement: {announcement}")
-                        ha.speak(announcement, HA_ANNOUNCE_ENTITY)
+                # Voice announcements (if announce entities configured)
+                if HA_ANNOUNCE_ENTITY:
+                    should_announce = not HA_VOICE_ENTITY or ha.check_entity_state(HA_VOICE_ENTITY)
+                    if should_announce:
+                        if not voice_limiter or voice_limiter.check_and_update():
+                            logger.info(f"Voice announcement: {announcement}")
+                            ha.speak(announcement, HA_ANNOUNCE_ENTITY)
+                        else:
+                            logger.info("Skipping voice announcement - in global cooldown")
                     else:
-                        logger.info("Skipping voice announcement - in global cooldown")
-                else:
-                    logger.info("Voice announcements disabled")
+                        logger.info("Voice announcements disabled by entity")
 
                 # Check if we should send SMS (when not home)
                 is_home = ha.check_entity_state(HA_HOME_OCCUPIED_ENTITY)
