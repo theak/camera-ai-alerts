@@ -12,7 +12,7 @@ from logging.handlers import RotatingFileHandler
 from threading import Lock
 from string import Template
 from collections import defaultdict
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 import requests
 from requests.auth import HTTPDigestAuth
 import yaml
@@ -300,6 +300,13 @@ def handle_motion():
 def health():
     """Health check endpoint"""
     return jsonify({"status": "ok"})
+
+@app.route('/debug/<image_type>')
+def debug_image(image_type):
+    if not DEBUG_SAVE_IMAGES or image_type not in ('last_scan', 'last_detection'):
+        return "Not found", 404
+    path = os.path.join(CONFIG_DIR, f'{image_type}.jpg')
+    return send_file(path) if os.path.exists(path) else ("Not found", 404)
 
 if __name__ == '__main__':
     logger.info("Starting motion detection server...")
