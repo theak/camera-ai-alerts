@@ -138,10 +138,10 @@ def fetch_image(url, username=None, password=None):
         logger.error(f"Error fetching image from {url}: {e}")
         raise
 
-def analyze_image(image_data, location):
+def analyze_image(image_data, location, system_prompt=None):
     """Send image to Gemini for analysis"""
     try:
-        prompt = SYSTEM_PROMPT_TEMPLATE.format(location=location)
+        prompt = system_prompt if system_prompt else SYSTEM_PROMPT_TEMPLATE.format(location=location)
         image_part = types.Part.from_bytes(data=image_data, mime_type='image/jpeg')
 
         response = client.models.generate_content(
@@ -179,6 +179,7 @@ def handle_motion():
         username = data.get('username')
         password = data.get('password')
         ignore_cooldown = data.get('ignoreCooldown', False)
+        system_prompt = data.get('system_prompt')
 
         # Check cooldown (unless explicitly ignored)
         if not ignore_cooldown and not location_limiters[location].check_and_update():
@@ -215,7 +216,7 @@ def handle_motion():
 
             # Analyze with Gemini
             logger.info(f"Analyzing image from {location} with Gemini...")
-            result = analyze_image(image_data, location)
+            result = analyze_image(image_data, location, system_prompt)
 
             # Increment analysis counter if configured
             if HA_ANALYSIS_COUNTER:
