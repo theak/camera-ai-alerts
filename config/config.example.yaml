@@ -30,6 +30,7 @@ rate_limiting:
   cooldown_seconds: 30 # Rate limit on how often to call the LLM per location
   # voice_announcement_cooldown_seconds: 60  # Optional: Global rate limit for voice announcements across all locations
   # sms_cooldown_seconds: 300  # Optional: Global rate limit for SMS notifications across all locations
+  # sms_delay_seconds: 120  # Optional: Delay before checking is_home and sending SMS
 
 # Server Configuration
 server:

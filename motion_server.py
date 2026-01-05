@@ -9,7 +9,7 @@ import sys
 import json
 import logging
 from logging.handlers import RotatingFileHandler
-from threading import Lock
+from threading import Lock, Timer
 from string import Template
 from collections import defaultdict
 from flask import Flask, request, jsonify, send_file
@@ -72,6 +72,7 @@ CALLMEBOT_API_KEY = callmebot['api_key']
 COOLDOWN_SECONDS = rate_limiting['cooldown_seconds']
 VOICE_ANNOUNCEMENT_COOLDOWN = rate_limiting.get('voice_announcement_cooldown_seconds')
 SMS_COOLDOWN = rate_limiting.get('sms_cooldown_seconds')
+SMS_DELAY_SECONDS = rate_limiting.get('sms_delay_seconds')
 SYSTEM_PROMPT_FILE = config['system_prompt_file']
 DEBUG_SAVE_IMAGES = config.get('debug', {}).get('save_images', False)
 GCS_ENABLED = config.get('google_cloud_storage', {}).get('enabled', False)
@@ -153,6 +154,18 @@ def analyze_image(image_data, location, system_prompt=None):
     except Exception as e:
         logger.error(f"Error analyzing image with Gemini: {e}")
         raise
+
+def send_sms_if_not_home(announcement):
+    """Delayed SMS callback - checks is_home after delay"""
+    is_home = ha.check_entity_state(HA_HOME_OCCUPIED_ENTITY)
+    if not is_home:
+        if not sms_limiter or sms_limiter.check_and_update():
+            logger.info(f"Sending delayed SMS: {announcement}")
+            sms.send(announcement)
+        else:
+            logger.info("Skipping SMS - in global cooldown")
+    else:
+        logger.info("SMS skipped - user is home")
 
 @app.route('/motion', methods=['GET', 'POST'])
 def handle_motion():
@@ -274,15 +287,12 @@ def handle_motion():
                         logger.info("Voice announcements disabled by entity")
 
                 # Check if we should send SMS (when not home)
-                is_home = ha.check_entity_state(HA_HOME_OCCUPIED_ENTITY)
-                if sms and not is_home:
-                    if not sms_limiter or sms_limiter.check_and_update():
-                        logger.info(f"Sending SMS: {announcement}")
-                        sms.send(announcement)
+                if sms:
+                    if SMS_DELAY_SECONDS:
+                        logger.info(f"Scheduling SMS in {SMS_DELAY_SECONDS}s...")
+                        Timer(SMS_DELAY_SECONDS, send_sms_if_not_home, [announcement]).start()
                     else:
-                        logger.info("Skipping SMS - in global cooldown")
-                else:
-                    logger.info(f"SMS skipped (home={is_home}, enabled={sms is not None})")
+                        send_sms_if_not_home(announcement)
 
             return jsonify({
                 "location": location,
