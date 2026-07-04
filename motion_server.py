@@ -20,7 +20,7 @@ from google import genai
 from google.genai import types
 from ha import HomeAssistant
 from notifications import CallMeBotSMS
-from rate_limiter import RateLimiter
+from rate_limiter import RateLimiter, ConsecutiveNoneTracker
 from gcs_backup import GCSBackup
 
 # Configure logging
@@ -73,6 +73,8 @@ COOLDOWN_SECONDS = rate_limiting['cooldown_seconds']
 VOICE_ANNOUNCEMENT_COOLDOWN = rate_limiting.get('voice_announcement_cooldown_seconds')
 SMS_COOLDOWN = rate_limiting.get('sms_cooldown_seconds')
 SMS_DELAY_SECONDS = rate_limiting.get('sms_delay_seconds')
+CONSECUTIVE_NONE_THRESHOLD = rate_limiting.get('consecutive_none_threshold')
+NONE_DETECTION_WINDOW = rate_limiting.get('none_detection_window_seconds')
 SYSTEM_PROMPT_FILE = config['system_prompt_file']
 DEBUG_SAVE_IMAGES = config.get('debug', {}).get('save_images', False)
 GCS_ENABLED = config.get('google_cloud_storage', {}).get('enabled', False)
@@ -108,6 +110,12 @@ if GCS_ENABLED:
 location_limiters = defaultdict(lambda: RateLimiter(COOLDOWN_SECONDS))
 voice_limiter = RateLimiter(VOICE_ANNOUNCEMENT_COOLDOWN) if VOICE_ANNOUNCEMENT_COOLDOWN else None
 sms_limiter = RateLimiter(SMS_COOLDOWN) if SMS_COOLDOWN else None
+
+# Per-location pause after consecutive "None" results (both fields required to enable)
+none_pause_enabled = bool(CONSECUTIVE_NONE_THRESHOLD and NONE_DETECTION_WINDOW)
+none_trackers = defaultdict(
+    lambda: ConsecutiveNoneTracker(CONSECUTIVE_NONE_THRESHOLD, NONE_DETECTION_WINDOW)
+) if none_pause_enabled else None
 
 # In-flight request tracking (prevents thundering herd)
 processing_locations = set()
@@ -194,6 +202,14 @@ def handle_motion():
         ignore_cooldown = data.get('ignoreCooldown', False)
         system_prompt = data.get('system_prompt')
 
+        # Skip if this location has gone quiet (N consecutive None results within the window)
+        if not ignore_cooldown and none_trackers is not None and none_trackers[location].should_skip():
+            logger.info(f"Skipping {location} - {CONSECUTIVE_NONE_THRESHOLD} consecutive None results within {NONE_DETECTION_WINDOW}s")
+            return jsonify({
+                "location": location,
+                "result": "skipped_none_streak"
+            })
+
         # Check cooldown (unless explicitly ignored)
         if not ignore_cooldown and not location_limiters[location].check_and_update():
             logger.info(f"Skipping {location} - in cooldown period")
@@ -240,8 +256,16 @@ def handle_motion():
             logger.info(f"{result}")
             logger.info(f"=" * 50)
 
+            # Track consecutive None results per location (for the quiet-location pause)
+            is_none = result.lower() == "none"
+            if none_trackers is not None:
+                if is_none:
+                    none_trackers[location].record_none()
+                else:
+                    none_trackers[location].record_detection()
+
             # Announce via Home Assistant if something detected
-            if result.lower() != "none":
+            if not is_none:
                 # Save last detection image for debugging
                 if DEBUG_SAVE_IMAGES:
                     with open('config/last_detection.jpg', 'wb') as f:

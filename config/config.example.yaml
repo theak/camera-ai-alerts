@@ -31,6 +31,8 @@ rate_limiting:
   # voice_announcement_cooldown_seconds: 60  # Optional: Global rate limit for voice announcements across all locations
   # sms_cooldown_seconds: 300  # Optional: Global rate limit for SMS notifications across all locations
   # sms_delay_seconds: 120  # Optional: Delay before checking is_home and sending SMS
+  # consecutive_none_threshold: 3  # Optional: Pause a location's LLM calls after this many consecutive "None" results...
+  # none_detection_window_seconds: 300  # Optional: ...but only while those consecutive Nones fall within this rolling window (requires consecutive_none_threshold)
 
 # Server Configuration
 server:
