@@ -1,6 +1,6 @@
 # Gemini Configuration
 gemini:
-  model: "gemini-2.0-flash-exp" # Run `python list_models.py` to get the full list
+  model: "gemini-2.5-flash-lite" # Run `python list_models.py` to get the full list
   api_key: $GOOGLE_API_KEY
 
 # Home Assistant Configuration
