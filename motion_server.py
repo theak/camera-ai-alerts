@@ -5,14 +5,17 @@ and process camera images with Google Gemini API.
 """
 
 import os
+import re
 import sys
 import json
+from urllib.parse import quote
 import logging
+from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from threading import Lock, Timer
 from string import Template
 from collections import defaultdict
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, Response, render_template_string
 import requests
 from requests.auth import HTTPDigestAuth
 import yaml
@@ -175,6 +178,188 @@ def send_sms_if_not_home(announcement):
     else:
         logger.info("SMS skipped - user is home")
 
+# Detection filename format written by GCSBackup.upload_image:
+#   {YYYYMMDD}_{HHMMSS}_{location}_{sanitized_description}.jpg
+# The raw location may contain spaces (e.g. "Front Door") but not underscores,
+# so the first underscore after the timestamp is the area/description boundary.
+DETECTION_NAME_RE = re.compile(r'^(\d{8})_(\d{6})_(.+)\.jpg$')
+
+
+def parse_detection_name(name):
+    """Parse a GCS detection object name into structured fields.
+
+    Returns a dict {name, timestamp, area, description} or None if it doesn't
+    match the expected detection filename format.
+    """
+    match = DETECTION_NAME_RE.match(name)
+    if not match:
+        return None
+
+    date_str, time_str, rest = match.groups()
+    try:
+        ts = datetime.strptime(f"{date_str}_{time_str}", "%Y%m%d_%H%M%S")
+    except ValueError:
+        return None
+
+    area, sep, desc = rest.partition('_')
+    description = desc.replace('_', ' ').strip() if sep else ''
+
+    return {
+        "name": name,
+        "timestamp": ts.isoformat(),
+        "area": area,
+        "description": description,
+    }
+
+
+DETECTIONS_HTML = r"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Camera Detections</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #181b22; --panel-2: #1f232c;
+    --border: #2a2f3a; --text: #e6e9ef; --muted: #97a0b0;
+    --accent: #6ea8fe; --chip: #263041;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    position: sticky; top: 0; z-index: 5; background: var(--panel);
+    border-bottom: 1px solid var(--border); padding: 14px 20px;
+  }
+  h1 { margin: 0 0 12px; font-size: 18px; font-weight: 600; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  input, select {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; font-size: 14px; min-width: 150px;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  .status { margin-left: auto; color: var(--muted); font-size: 13px; }
+  main { padding: 20px; }
+  .grid {
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .card a { display: block; background: #000; aspect-ratio: 16 / 9; }
+  .card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .card .body { padding: 10px 12px 12px; }
+  .card .desc { font-size: 14px; margin: 0 0 8px; }
+  .card .meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .chip { background: var(--chip); color: var(--accent); border-radius: 999px; padding: 2px 10px; font-size: 12px; white-space: nowrap; }
+  .time { color: var(--muted); font-size: 12px; }
+  .empty { color: var(--muted); text-align: center; padding: 60px 20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Camera Detections</h1>
+  <div class="controls">
+    <div class="field"><label for="range">Range</label><select id="range">
+      <option value="0">All time</option>
+      <option value="30">Past 30 days</option>
+      <option value="7">Past 7 days</option>
+      <option value="1">Past 24 hours</option>
+    </select></div>
+    <div class="field"><label for="area">Area</label><select id="area"><option value="">All areas</option></select></div>
+    <div class="field"><label for="q">Filter text</label><input type="search" id="q" placeholder="e.g. white car, person"></div>
+    <div class="status" id="status"></div>
+  </div>
+</header>
+<main>
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty" style="display:none">No detections match your filters.</div>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const grid = $('grid'), empty = $('empty'), status = $('status');
+  const areaSel = $('area');
+  let knownAreas = new Set();
+
+  function fmtDate(d) { return d.toISOString().slice(0, 10); }
+  function fmtTime(iso) {
+    const d = new Date(iso);
+    return isNaN(d) ? iso : d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
+
+  let timer = null;
+  function debouncedLoad() { clearTimeout(timer); timer = setTimeout(load, 250); }
+
+  async function load() {
+    const params = new URLSearchParams();
+    const days = parseInt($('range').value, 10);
+    if (days > 0) {
+      const start = new Date(Date.now() - (days - 1) * 86400000);
+      params.set('start', fmtDate(start));
+    }
+    if (areaSel.value) params.set('area', areaSel.value);
+    if ($('q').value.trim()) params.set('q', $('q').value.trim());
+    status.textContent = 'Loading…';
+    try {
+      const res = await fetch('/api/detections?' + params.toString());
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      render(data);
+    } catch (e) {
+      status.textContent = 'Error: ' + e.message;
+      grid.innerHTML = '';
+    }
+  }
+
+  function render(data) {
+    const items = data.detections || [];
+    // Grow the area dropdown as we discover areas.
+    for (const d of items) {
+      if (d.area && !knownAreas.has(d.area)) {
+        knownAreas.add(d.area);
+        const opt = document.createElement('option');
+        opt.value = opt.textContent = d.area;
+        areaSel.appendChild(opt);
+      }
+    }
+    status.textContent = data.count + ' detection' + (data.count === 1 ? '' : 's')
+      + (data.truncated ? ' (showing newest, refine filters for more)' : '');
+    empty.style.display = items.length ? 'none' : 'block';
+    grid.innerHTML = items.map(d => `
+      <div class="card">
+        <a href="${d.image_url}" target="_blank" rel="noopener">
+          <img loading="lazy" src="${d.image_url}" alt="">
+        </a>
+        <div class="body">
+          <p class="desc">${escapeHtml(d.description) || '<span class="time">(no description)</span>'}</p>
+          <div class="meta">
+            <span class="chip">${escapeHtml(d.area)}</span>
+            <span class="time">${fmtTime(d.timestamp)}</span>
+          </div>
+        </div>
+      </div>`).join('');
+  }
+
+  function escapeHtml(s) {
+    return (s || '').replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
+
+  ['range', 'area'].forEach(id => $(id).addEventListener('change', load));
+  $('q').addEventListener('input', debouncedLoad);
+  load();
+</script>
+</body>
+</html>"""
+
+
 @app.route('/motion', methods=['GET', 'POST'])
 def handle_motion():
     """Handle motion detection webhook from Blue Iris"""
@@ -336,6 +521,79 @@ def health():
     """Health check endpoint"""
     return jsonify({"status": "ok"})
 
+@app.route('/api/detections', methods=['GET'])
+def api_detections():
+    """List parsed detections from GCS, filtered by date range / area / text."""
+    if not gcs:
+        return jsonify({"error": "GCS is not configured"}), 503
+
+    start = request.args.get('start')  # YYYY-MM-DD (inclusive)
+    end = request.args.get('end')      # YYYY-MM-DD (inclusive)
+    area_filter = request.args.get('area')
+    query = (request.args.get('q') or '').strip().lower()
+    try:
+        limit = min(int(request.args.get('limit', 300)), 2000)
+    except ValueError:
+        limit = 300
+
+    # Names sort lexicographically by their leading timestamp, so bound the
+    # listing with date offsets. `end` is inclusive → use next-day prefix.
+    start_offset = f"{start.replace('-', '')}_" if start else None
+    end_offset = None
+    if end:
+        try:
+            end_dt = datetime.strptime(end, "%Y-%m-%d") + timedelta(days=1)
+            end_offset = f"{end_dt.strftime('%Y%m%d')}_"
+        except ValueError:
+            end_offset = None
+
+    detections = []
+    for name, _updated in gcs.list_blobs(start_offset, end_offset):
+        parsed = parse_detection_name(name)
+        if not parsed:
+            continue
+        if area_filter and parsed['area'] != area_filter:
+            continue
+        if query and query not in f"{parsed['area']} {parsed['description']}".lower():
+            continue
+        parsed['image_url'] = f"/detections/image/{quote(name)}"
+        detections.append(parsed)
+
+    detections.sort(key=lambda d: d['name'], reverse=True)  # newest first
+    truncated = len(detections) > limit
+
+    return jsonify({
+        "count": len(detections[:limit]),
+        "truncated": truncated,
+        "detections": detections[:limit],
+    })
+
+
+@app.route('/detections/image/<path:blob_name>', methods=['GET'])
+def detection_image(blob_name):
+    """Proxy a detection JPEG from GCS (validated to prevent arbitrary reads)."""
+    if not gcs:
+        return "Not found", 404
+    if not DETECTION_NAME_RE.match(blob_name):
+        return "Bad request", 400
+
+    data = gcs.download_bytes(blob_name)
+    if data is None:
+        return "Not found", 404
+
+    return Response(
+        data,
+        mimetype='image/jpeg',
+        headers={'Cache-Control': 'public, max-age=31536000, immutable'},
+    )
+
+
+@app.route('/detections', methods=['GET'])
+def detections_page():
+    """Serve the single-page detections viewer."""
+    return render_template_string(DETECTIONS_HTML)
+
+
 @app.route('/debug/<image_type>')
 def debug_image(image_type):
     if not DEBUG_SAVE_IMAGES or image_type not in ('last_scan', 'last_detection'):
@@ -347,8 +605,9 @@ if __name__ == '__main__':
     logger.info("Starting motion detection server...")
     logger.info(f"Gemini API configured: {'✓' if GEMINI_API_KEY else '✗'}")
     logger.info(f"Model: {GEMINI_MODEL}")
-    app.run(
+    from waitress import serve
+    serve(
+        app,
         host=config['server']['host'],
-        port=config['server']['port'],
-        debug=False
+        port=config['server']['port']
     )
