@@ -212,12 +212,12 @@ def parse_detection_name(name):
     }
 
 
-DETECTIONS_HTML = r"""<!doctype html>
+EVENTS_HTML = r"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Camera Detections</title>
+<title>Camera Events</title>
 <style>
   :root {
     --bg: #0f1115; --panel: #181b22; --panel-2: #1f232c;
@@ -264,7 +264,7 @@ DETECTIONS_HTML = r"""<!doctype html>
 </head>
 <body>
 <header>
-  <h1>Camera Detections</h1>
+  <h1>Camera Events</h1>
   <div class="controls">
     <div class="field"><label for="range">Range</label><select id="range">
       <option value="0">All time</option>
@@ -307,7 +307,7 @@ DETECTIONS_HTML = r"""<!doctype html>
     if ($('q').value.trim()) params.set('q', $('q').value.trim());
     status.textContent = 'Loading…';
     try {
-      const res = await fetch('/api/detections?' + params.toString());
+      const res = await fetch('/api/events?' + params.toString());
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       render(data);
@@ -521,9 +521,9 @@ def health():
     """Health check endpoint"""
     return jsonify({"status": "ok"})
 
-@app.route('/api/detections', methods=['GET'])
-def api_detections():
-    """List parsed detections from GCS, filtered by date range / area / text."""
+@app.route('/api/events', methods=['GET'])
+def api_events():
+    """List parsed detection events from GCS, filtered by date range / area / text."""
     if not gcs:
         return jsonify({"error": "GCS is not configured"}), 503
 
@@ -556,7 +556,7 @@ def api_detections():
             continue
         if query and query not in f"{parsed['area']} {parsed['description']}".lower():
             continue
-        parsed['image_url'] = f"/detections/image/{quote(name)}"
+        parsed['image_url'] = f"/events/image/{quote(name)}"
         detections.append(parsed)
 
     detections.sort(key=lambda d: d['name'], reverse=True)  # newest first
@@ -569,8 +569,8 @@ def api_detections():
     })
 
 
-@app.route('/detections/image/<path:blob_name>', methods=['GET'])
-def detection_image(blob_name):
+@app.route('/events/image/<path:blob_name>', methods=['GET'])
+def event_image(blob_name):
     """Proxy a detection JPEG from GCS (validated to prevent arbitrary reads)."""
     if not gcs:
         return "Not found", 404
@@ -588,10 +588,10 @@ def detection_image(blob_name):
     )
 
 
-@app.route('/detections', methods=['GET'])
-def detections_page():
-    """Serve the single-page detections viewer."""
-    return render_template_string(DETECTIONS_HTML)
+@app.route('/events', methods=['GET'])
+def events_page():
+    """Serve the single-page events viewer."""
+    return render_template_string(EVENTS_HTML)
 
 
 @app.route('/debug/<image_type>')
