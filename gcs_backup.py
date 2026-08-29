@@ -89,3 +89,38 @@ class GCSBackup:
         except Exception as e:
             logger.error(f"Error uploading to GCS: {e}")
             return None
+
+    def list_blobs(self, start_offset=None, end_offset=None):
+        """
+        List blobs in the bucket, optionally bounded by name offsets.
+
+        Object names begin with a lexicographically sortable `YYYYMMDD_HHMMSS`
+        timestamp, so a date range maps cleanly to start/end offsets (e.g.
+        start="20260801_", end="20260806_" for an end-exclusive next-day bound).
+
+        Returns:
+            List of (name, updated) tuples.
+        """
+        try:
+            blobs = self.client.list_blobs(
+                self.bucket_name,
+                start_offset=start_offset,
+                end_offset=end_offset,
+            )
+            return [(b.name, b.updated) for b in blobs]
+        except Exception as e:
+            logger.error(f"Error listing GCS blobs: {e}")
+            return []
+
+    def download_bytes(self, blob_name):
+        """
+        Download a blob's raw bytes.
+
+        Returns:
+            bytes on success, None if the object is missing or on error.
+        """
+        try:
+            return self.bucket.blob(blob_name).download_as_bytes()
+        except Exception as e:
+            logger.error(f"Error downloading blob {blob_name} from GCS: {e}")
+            return None
