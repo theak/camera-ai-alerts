@@ -333,7 +333,7 @@ EVENTS_HTML = r"""<!doctype html>
     empty.style.display = items.length ? 'none' : 'block';
     grid.innerHTML = items.map(d => `
       <div class="card">
-        <a href="${d.image_url}" target="_blank" rel="noopener">
+        <a href="${d.image_url}">
           <img loading="lazy" src="${d.image_url}" alt="">
         </a>
         <div class="body">
