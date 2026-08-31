@@ -206,7 +206,9 @@ def parse_detection_name(name):
 
     return {
         "name": name,
-        "timestamp": ts.isoformat(),
+        # Filenames are stamped with the server's clock, which runs UTC in the
+        # container; mark the timestamp accordingly so clients convert to local.
+        "timestamp": ts.isoformat() + "Z",
         "area": area,
         "description": description,
     }
