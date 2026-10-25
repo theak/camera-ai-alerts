@@ -10,7 +10,7 @@ import sys
 import json
 from urllib.parse import quote
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler
 from threading import Lock, Timer
 from string import Template
@@ -123,6 +123,10 @@ none_trackers = defaultdict(
 # In-flight request tracking (prevents thundering herd)
 processing_locations = set()
 processing_lock = Lock()
+
+# Most recent analysis (image + result), shown first on /events when it was "None".
+# In memory only: last_scan.jpg is overwritten before its result is known.
+last_analysis = None
 
 # Load system prompt template
 with open(SYSTEM_PROMPT_FILE, 'r') as f:
@@ -262,6 +266,7 @@ EVENTS_HTML = r"""<!doctype html>
   .chip { background: var(--chip); color: var(--accent); border-radius: 999px; padding: 2px 10px; font-size: 12px; white-space: nowrap; }
   .time { color: var(--muted); font-size: 12px; }
   .empty { color: var(--muted); text-align: center; padding: 60px 20px; }
+  .card.scan .desc { color: var(--muted); }
 </style>
 </head>
 <body>
@@ -332,9 +337,11 @@ EVENTS_HTML = r"""<!doctype html>
     }
     status.textContent = data.count + ' detection' + (data.count === 1 ? '' : 's')
       + (data.truncated ? ' (showing newest, refine filters for more)' : '');
-    empty.style.display = items.length ? 'none' : 'block';
-    grid.innerHTML = items.map(d => `
-      <div class="card">
+    // The latest analysis, when it found nothing, leads the grid captioned "None".
+    const cards = data.last_scan ? [{ ...data.last_scan, scan: true }, ...items] : items;
+    empty.style.display = cards.length ? 'none' : 'block';
+    grid.innerHTML = cards.map(d => `
+      <div class="card${d.scan ? ' scan' : ''}">
         <a href="${d.image_url}">
           <img loading="lazy" src="${d.image_url}" alt="">
         </a>
@@ -365,6 +372,7 @@ EVENTS_HTML = r"""<!doctype html>
 @app.route('/motion', methods=['GET', 'POST'])
 def handle_motion():
     """Handle motion detection webhook from Blue Iris"""
+    global last_analysis
     try:
         # Parse request data
         if request.method == 'POST':
@@ -433,6 +441,13 @@ def handle_motion():
             # Analyze with Gemini
             logger.info(f"Analyzing image from {location} with Gemini...")
             result = analyze_image(image_data, location, system_prompt)
+
+            last_analysis = {
+                "image": image_data,
+                "area": location,
+                "result": result,
+                "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            }
 
             # Increment analysis counter if configured
             if HA_ANALYSIS_COUNTER:
@@ -564,11 +579,35 @@ def api_events():
     detections.sort(key=lambda d: d['name'], reverse=True)  # newest first
     truncated = len(detections) > limit
 
+    # The latest analysis, if it found nothing (a detection is already in the list).
+    last_scan = None
+    latest = last_analysis
+    if (latest and latest['result'].lower() == 'none'
+            and (not area_filter or latest['area'] == area_filter)
+            and (not query or query in f"{latest['area']} none".lower())):
+        last_scan = {
+            "timestamp": latest['timestamp'],
+            "area": latest['area'],
+            "description": "None",
+            "image_url": f"/events/last_scan.jpg?t={quote(latest['timestamp'])}",
+        }
+
     return jsonify({
         "count": len(detections[:limit]),
         "truncated": truncated,
         "detections": detections[:limit],
+        "last_scan": last_scan,
     })
+
+
+@app.route('/events/last_scan.jpg', methods=['GET'])
+def last_scan_image():
+    """The image from the most recent analysis, whatever its result."""
+    latest = last_analysis
+    if not latest:
+        return "Not found", 404
+    return Response(latest['image'], mimetype='image/jpeg',
+                    headers={'Cache-Control': 'no-store'})
 
 
 @app.route('/events/image/<path:blob_name>', methods=['GET'])
