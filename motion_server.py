@@ -267,6 +267,12 @@ EVENTS_HTML = r"""<!doctype html>
   .time { color: var(--muted); font-size: 12px; }
   .empty { color: var(--muted); text-align: center; padding: 60px 20px; }
   .card.scan .desc { color: var(--muted); }
+  /* Full-size view. Opening the bare image only fits the window in a top-level tab, not
+     inside Home Assistant's iframe, so images open in this overlay instead. */
+  .viewer { position: fixed; inset: 0; z-index: 10; background: rgba(0,0,0,.92);
+    display: none; align-items: center; justify-content: center; cursor: zoom-out; }
+  .viewer.open { display: flex; }
+  .viewer img { max-width: 100%; max-height: 100%; object-fit: contain; }
 </style>
 </head>
 <body>
@@ -288,6 +294,7 @@ EVENTS_HTML = r"""<!doctype html>
   <div class="grid" id="grid"></div>
   <div class="empty" id="empty" style="display:none">No detections match your filters.</div>
 </main>
+<div class="viewer" id="viewer"><img alt=""></div>
 <script>
   const $ = (id) => document.getElementById(id);
   const grid = $('grid'), empty = $('empty'), status = $('status');
@@ -360,6 +367,17 @@ EVENTS_HTML = r"""<!doctype html>
       { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
     ));
   }
+
+  const viewer = $('viewer');
+  grid.addEventListener('click', (e) => {
+    const a = e.target.closest('.card a');
+    if (!a || e.metaKey || e.ctrlKey || e.shiftKey) return;  // modified clicks open a tab
+    e.preventDefault();
+    viewer.querySelector('img').src = a.getAttribute('href');
+    viewer.classList.add('open');
+  });
+  viewer.addEventListener('click', () => viewer.classList.remove('open'));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') viewer.classList.remove('open'); });
 
   ['range', 'area'].forEach(id => $(id).addEventListener('change', load));
   $('q').addEventListener('input', debouncedLoad);
