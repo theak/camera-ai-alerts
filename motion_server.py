@@ -261,18 +261,22 @@ EVENTS_HTML = r"""<!doctype html>
   .card a { display: block; background: #000; aspect-ratio: 16 / 9; }
   .card img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .card .body { padding: 10px 12px 12px; }
-  .card .desc { font-size: 14px; margin: 0 0 8px; }
-  .card .meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .desc { font-size: 14px; margin: 0 0 8px; }
+  .meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .chip { background: var(--chip); color: var(--accent); border-radius: 999px; padding: 2px 10px; font-size: 12px; white-space: nowrap; }
   .time { color: var(--muted); font-size: 12px; }
   .empty { color: var(--muted); text-align: center; padding: 60px 20px; }
-  .card.scan .desc { color: var(--muted); }
+  .scan .desc { color: var(--muted); }
   /* Full-size view. Opening the bare image only fits the window in a top-level tab, not
      inside Home Assistant's iframe, so images open in this overlay instead. */
   .viewer { position: fixed; inset: 0; z-index: 10; background: rgba(0,0,0,.92);
     display: none; align-items: center; justify-content: center; cursor: zoom-out; }
   .viewer.open { display: flex; }
   .viewer img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  /* The thumbnail's caption, laid over the bottom of the full-size view. */
+  .viewer .caption { position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 20px 16px;
+    background: linear-gradient(transparent, rgba(0,0,0,.7)); pointer-events: none; }
+  .viewer .caption > * { max-width: 720px; }
 </style>
 </head>
 <body>
@@ -294,7 +298,7 @@ EVENTS_HTML = r"""<!doctype html>
   <div class="grid" id="grid"></div>
   <div class="empty" id="empty" style="display:none">No detections match your filters.</div>
 </main>
-<div class="viewer" id="viewer"><img alt=""></div>
+<div class="viewer" id="viewer"><img alt=""><div class="caption"></div></div>
 <script>
   const $ = (id) => document.getElementById(id);
   const grid = $('grid'), empty = $('empty'), status = $('status');
@@ -374,7 +378,10 @@ EVENTS_HTML = r"""<!doctype html>
     const links = grid.querySelectorAll('.card a');
     if (i < 0 || i >= links.length) return;
     shown = i;
+    const card = links[i].closest('.card'), caption = viewer.querySelector('.caption');
     viewer.querySelector('img').src = links[i].getAttribute('href');
+    caption.innerHTML = card.querySelector('.body').innerHTML;
+    caption.classList.toggle('scan', card.classList.contains('scan'));
     viewer.classList.add('open');
   }
   grid.addEventListener('click', (e) => {
