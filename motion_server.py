@@ -369,15 +369,27 @@ EVENTS_HTML = r"""<!doctype html>
   }
 
   const viewer = $('viewer');
+  let shown = 0;  // index of the open image among the grid's links
+  function show(i) {
+    const links = grid.querySelectorAll('.card a');
+    if (i < 0 || i >= links.length) return;
+    shown = i;
+    viewer.querySelector('img').src = links[i].getAttribute('href');
+    viewer.classList.add('open');
+  }
   grid.addEventListener('click', (e) => {
     const a = e.target.closest('.card a');
     if (!a || e.metaKey || e.ctrlKey || e.shiftKey) return;  // modified clicks open a tab
     e.preventDefault();
-    viewer.querySelector('img').src = a.getAttribute('href');
-    viewer.classList.add('open');
+    show([...grid.querySelectorAll('.card a')].indexOf(a));
   });
   viewer.addEventListener('click', () => viewer.classList.remove('open'));
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') viewer.classList.remove('open'); });
+  document.addEventListener('keydown', (e) => {
+    if (!viewer.classList.contains('open')) return;
+    if (e.key === 'Escape') viewer.classList.remove('open');
+    else if (e.key === 'ArrowRight') show(shown + 1);  // the grid is newest first
+    else if (e.key === 'ArrowLeft') show(shown - 1);
+  });
 
   ['range', 'area'].forEach(id => $(id).addEventListener('change', load));
   $('q').addEventListener('input', debouncedLoad);
