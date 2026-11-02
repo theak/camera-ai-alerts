@@ -276,7 +276,6 @@ EVENTS_HTML = r"""<!doctype html>
   /* The thumbnail's caption, laid over the bottom of the full-size view. */
   .viewer .caption { position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 20px 16px;
     background: linear-gradient(transparent, rgba(0,0,0,.7)); pointer-events: none; }
-  .viewer .caption > * { max-width: 720px; }
 </style>
 </head>
 <body>
